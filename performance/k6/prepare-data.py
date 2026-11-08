@@ -1,6 +1,8 @@
+
 import json
 from pathlib import Path
 
+# Ubicación de los repositorios dentro del runner.
 WORKSPACE = Path(__file__).resolve().parents[3]
 
 JSON_DIR = (
@@ -14,16 +16,14 @@ MOVIES_PATH = JSON_DIR / "movies.json"
 
 RENT_ITERATIONS = 10
 
-RENT_BUYER_PREFIX = 9000000000
-RETURN_BUYER_PREFIX = 9100000000
-
-OLD_QA_PREFIXES = ("qa-rent-", "qa-return-")
-
 RENT_MOVIE_ID = "tt0120912"
 RETURN_MOVIE_ID = "tt0451279"
 
 RENT_INITIAL_STOCK = "12311"
 RETURN_INITIAL_STOCK = "100"
+
+RENT_BUYER_START_ID = 9001
+RETURN_BUYER_START_ID = 9011
 
 
 def load_json(path):
@@ -53,7 +53,7 @@ def create_buyer(buyer_id, rented_movies):
     return {
         "id": buyer_id,
         "name": "QA Performance Test",
-        "email": f"{buyer_id}@example.invalid",
+        "email": f"qa-{buyer_id}@example.invalid",
         "password": "qa-fixture",
         "address": "QA Test Address",
         "phone": "0",
@@ -71,11 +71,10 @@ def main():
     if not MOVIES_PATH.exists():
         raise SystemExit(f"Movies file not found: {MOVIES_PATH}")
 
-    buyers = load_json(BUYERS_PATH)
     movies = load_json(MOVIES_PATH)
 
-    if not isinstance(buyers, list) or not isinstance(movies, list):
-        raise SystemExit("Invalid JSON structure")
+    if not isinstance(movies, list):
+        raise SystemExit("movies.json must contain a JSON array")
 
     rent_movie = next(
         (movie for movie in movies
@@ -95,26 +94,18 @@ def main():
     if return_movie is None:
         raise SystemExit(f"Movie {RETURN_MOVIE_ID} not found")
 
-    # Restablecer los stocks iniciales.
+    # Restablecer stocks iniciales.
     rent_movie["stock"] = RENT_INITIAL_STOCK
     return_movie["stock"] = RETURN_INITIAL_STOCK
 
-    # Eliminar fixtures anteriores, incluyendo los alfanuméricos
-    # creados por la versión anterior del script.
-    buyers = [
-        buyer for buyer in buyers
-        if not str(buyer.get("id", "")).startswith(
-            OLD_QA_PREFIXES
-            + (
-                str(RENT_BUYER_PREFIX),
-                str(RETURN_BUYER_PREFIX),
-            )
-        )
-    ]
+    # Crear un catálogo de compradores exclusivo para QA.
+    # No conservamos los compradores originales porque getMaxId()
+    # utiliza Integer.parseInt() sobre todos los identificadores.
+    buyers = []
 
-    # Preparar compradores para alquiler.
+    # Compradores preparados para alquiler.
     for index in range(RENT_ITERATIONS):
-        buyer_id = str(RENT_BUYER_PREFIX + index)
+        buyer_id = str(RENT_BUYER_START_ID + index)
 
         rental = create_rental(buyer_id, rent_movie)
 
@@ -126,9 +117,9 @@ def main():
         buyer["cart"]["movies"] = [rental]
         buyers.append(buyer)
 
-    # Preparar compradores para devolución.
+    # Compradores preparados para devolución.
     for index in range(RENT_ITERATIONS):
-        buyer_id = str(RETURN_BUYER_PREFIX + index)
+        buyer_id = str(RETURN_BUYER_START_ID + index)
 
         rental = create_rental(buyer_id, return_movie)
 
@@ -143,8 +134,9 @@ def main():
     save_json(MOVIES_PATH, movies)
 
     print("QA fixtures prepared successfully.")
-    print("Rent buyer IDs: 9000000000 - 9000000009")
-    print("Return buyer IDs: 9100000000 - 9100000009")
+    print(f"Rent buyers: {RENT_ITERATIONS}")
+    print(f"Return buyers: {RENT_ITERATIONS}")
+    print("Buyer IDs: 9001-9020")
     print(f"Rent movie stock: {RENT_INITIAL_STOCK}")
     print(f"Return movie stock: {RETURN_INITIAL_STOCK}")
 
