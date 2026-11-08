@@ -33,6 +33,11 @@
  * 
  * - ¿Quieres someter al servidor a 3 minutos de estrés continuo? 
  *   Cambia el "duration" de la fase 2 (la del medio) de '15s' a '3m'.
+ *  
+ * IMPORTANTE:
+ * standardOptions solo se usa  para pruebas locales
+ * (Catálogo, Persistencia, etc.), sus configuraciones solamente van a 
+ * afectar a esos módulos.
  * ==========================================================================
  */
 
@@ -42,4 +47,25 @@ export const standardOptions = {
         { duration: '15s', target: 10 }, // Fase 2: Carga sostenida (Mantener 10 usuarios por 15 seg)
         { duration: '10s', target: 0 },  // Fase 3: Ramp-down (Bajar a 0 usuarios en 10 seg)
     ],
+};
+
+/**
+ * apiLimitedOptions: ES EXCLUSIVO PARA ENDPOINTS QUE USAN OMDB API (Prioridad 4)
+ * Para evitar el bloqueo por límite diario (1,000 consultas/día en la cuenta gratuita).
+ * 
+ * ¿CÓMO MODIFICARLO DE FORMA SEGURA?
+ * - 'iterations': Límite MÁXIMO EXACTO de peticiones que se enviarán en total. 
+ *                 Actualmente en 100 para dejar margen para otras pruebas en el día.
+ *                 NO SUPERAR LAS 300 POR PRUEBA para evitar bloqueos.
+ * - 'vus': Usuarios simultáneos haciendo esas peticiones.
+ */
+export const apiLimitedOptions = {
+    scenarios: {
+        api_limit: {
+            executor: 'shared-iterations',
+            vus: 5,
+            iterations: 100, // El script se detendrá exactamente tras 100 peticiones
+            maxDuration: '30s',
+        },
+    },
 };
