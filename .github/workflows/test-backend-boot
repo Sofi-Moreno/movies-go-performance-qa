@@ -1,0 +1,56 @@
+name: Test Backend Boot
+
+on:
+  workflow_dispatch:
+
+jobs:
+  boot-test:
+    name: Boot Spring Boot and Test Port
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout QA repository
+        uses: actions/checkout@v7
+        with:
+          path: qa
+
+      - name: Checkout original Movies Go
+        uses: actions/checkout@v7
+        with:
+          repository: AsaelCRdev/Proyecto-equipo-64-1
+          ref: main
+          path: movies-go
+          persist-credentials: false
+
+      - name: Set up Java 21 and Maven cache
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: movies-go/Back/pom.xml
+
+      - name: Start Spring Boot Application
+        run: |
+          # Ejecutamos el backend en segundo plano usando 'nohup' y '&'
+          nohup mvn -B -f movies-go/Back/pom.xml spring-boot:run > backend.log 2>&1 &
+          
+          # Guardamos el ID del proceso (PID)
+          echo $! > backend.pid
+
+      - name: Wait for backend to be ready
+        run: |
+          echo "Esperando a que Spring Boot abra el puerto 8080..."
+          timeout 60 bash -c 'until curl --silent --fail http://localhost:8080 > /dev/null || curl --silent --output /dev/null http://localhost:8080; do sleep 2; echo "Reintentando..."; done'
+          echo "¡Puerto 8080 respondiendo!"
+
+      - name: Display Backend Logs (on failure)
+        if: failure()
+        run: cat backend.log
+
+      - name: Stop Spring Boot
+        if: always()
+        run: |
+          if [ -f backend.pid ]; then
+            kill $(cat backend.pid) || true
+          fi
