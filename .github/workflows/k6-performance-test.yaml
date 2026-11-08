@@ -119,11 +119,13 @@ jobs:
           retention-days: 3
           if-no-files-found: warn
 
-      - name: Show backend logs if workflow failed
+      - name: Show backend logs on failure
         if: failure()
         shell: bash
         run: |
-          tail -n 100 "$RUNNER_TEMP/backend.log" || true
+          echo "========== BACKEND LOG =========="
+          cat "$RUNNER_TEMP/backend.log"
+          echo "================================="
 
       - name: Stop Spring Boot
         if: always()
