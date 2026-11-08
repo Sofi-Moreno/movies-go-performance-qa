@@ -1,0 +1,71 @@
+name: K6 Performance Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: 'Selecciona la prioridad a evaluar (Según PDF de QA)'
+        required: true
+        type: choice
+        options:
+          - 1-rent-stock
+          - 2-persistence
+          - 3-search-local
+          - 4-external-api
+
+jobs:
+  load-test:
+    name: Load Test (${{ github.event.inputs.scenario }})
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout QA repository
+        uses: actions/checkout@v7
+        with:
+          path: qa
+
+      - name: Checkout original Movies Go
+        uses: actions/checkout@v7
+        with:
+          repository: AsaelCRdev/Proyecto-equipo-64-1
+          ref: main
+          path: movies-go
+          persist-credentials: false
+
+      - name: Set up Java 21 & Maven cache
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: movies-go/Back/pom.xml
+
+      - name: Start Spring Boot Application
+        env:
+          OMDB_KEY: ${{ secrets.OMDB_KEY }}
+        run: |
+          nohup mvn -B -f movies-go/Back/pom.xml spring-boot:run > backend.log 2>&1 &
+          echo $! > backend.pid
+
+      - name: Wait for backend to be ready
+        run: |
+          timeout 60 bash -c 'until curl --silent --fail http://localhost:8080 > /dev/null || curl --silent --output /dev/null http://localhost:8080; do sleep 2; done'
+
+      - name: Run k6 scenario
+        uses: grafana/k6-action@v0.3.1
+        with:
+          filename: qa/performance/k6/scenarios/${{ github.event.inputs.scenario }}.js
+
+      - name: Upload HTML Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: reporte-${{ github.event.inputs.scenario }}
+          path: "**/reporte-*.html" 
+          retention-days: 3
+
+      - name: Stop Spring Boot
+        if: always()
+        run: |
+          if [ -f backend.pid ]; then
+            kill $(cat backend.pid) || true
+          fi
