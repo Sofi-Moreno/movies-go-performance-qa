@@ -24,7 +24,7 @@ function safeJson(response) {
 export default function () {
 
     const index = exec.scenario.iterationInTest;
-    const buyerId = String(9000000000 + index);
+    const buyerId = String(9001 + index);
     // 1. Ejecutar alquiler.
     const rentResponse = http.post(
         `${BASE_URL}/rent?id=${encodeURIComponent(buyerId)}`
