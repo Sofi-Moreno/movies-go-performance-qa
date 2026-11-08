@@ -1,11 +1,10 @@
-
 name: K6 Performance Tests
 
 on:
   workflow_dispatch:
     inputs:
       scenario:
-        description: 'Selecciona la prioridad a evaluar (Según PDF de QA)'
+        description: 'Selecciona el escenario de rendimiento'
         required: true
         type: choice
         options:
@@ -14,9 +13,13 @@ on:
           - 3-search-local
           - 4-external-api
 
+concurrency:
+  group: movies-go-k6-performance
+  cancel-in-progress: false
+
 jobs:
   load-test:
-    name: Load Test (${{ github.event.inputs.scenario }})
+    name: Load Test (${{ inputs.scenario }})
     runs-on: ubuntu-latest
 
     steps:
@@ -33,16 +36,28 @@ jobs:
           path: movies-go
           persist-credentials: false
 
-      - name: Verify project and k6 files
+      - name: Verify project and test files
         shell: bash
         run: |
           set -e
 
           test -f movies-go/Back/pom.xml
-          test -f qa/performance/k6/config/standar-configuration.js
-          test -f "qa/performance/k6/scenarios/${{ github.event.inputs.scenario }}.js"
+          test -f movies-go/Back/src/main/java/com/backend/moviesgo/json/buyers.json
+          test -f movies-go/Back/src/main/java/com/backend/moviesgo/json/movies.json
 
-          echo "Movies Go and k6 files verified."
+          test -f qa/performance/k6/config/standar-configuration.js
+          test -f qa/performance/k6/prepare-data.py
+          test -f "qa/performance/k6/scenarios/${{ inputs.scenario }}.js"
+
+      - name: Verify OMDb secret
+        env:
+          OMDB_KEY: ${{ secrets.OMDB_KEY }}
+        shell: bash
+        run: |
+          if [ -z "$OMDB_KEY" ]; then
+            echo "The OMDB_KEY secret is required by the backend."
+            exit 1
+          fi
 
       - name: Set up Java 21 and Maven cache
         uses: actions/setup-java@v6
@@ -52,22 +67,30 @@ jobs:
           cache: maven
           cache-dependency-path: movies-go/Back/pom.xml
 
-      - name: Start Spring Boot Application
+      - name: Prepare isolated test data
+        run: |
+          python3 qa/performance/k6/prepare-data.py
+
+      - name: Start Spring Boot application
+        working-directory: movies-go/Back
         env:
           OMDB_KEY: ${{ secrets.OMDB_KEY }}
+        shell: bash
         run: |
-          nohup mvn -B -f movies-go/Back/pom.xml spring-boot:run \
+          nohup mvn -B spring-boot:run \
             > "$RUNNER_TEMP/backend.log" 2>&1 &
 
           echo $! > "$RUNNER_TEMP/backend.pid"
 
-      - name: Wait for backend to be ready
+      - name: Wait for backend
         shell: bash
         run: |
           for i in {1..45}; do
-            if curl --silent --max-time 2 \
-              --output /dev/null http://127.0.0.1:8080/; then
-              echo "Backend is responding."
+            if curl --fail --silent \
+              http://127.0.0.1:8080/getGenres \
+              --output /dev/null; then
+
+              echo "Backend is ready."
               exit 0
             fi
 
@@ -81,28 +104,30 @@ jobs:
       - name: Set up k6
         uses: grafana/setup-k6-action@v1
 
-      - name: Run k6 scenario
+      - name: Run selected k6 scenario
         uses: grafana/run-k6-action@v1
         with:
-          path: qa/performance/k6/scenarios/${{ github.event.inputs.scenario }}.js
-          debug: true
+          path: qa/performance/k6/scenarios/${{ inputs.scenario }}.js
+          debug: false
 
-      - name: Upload HTML Report
+      - name: Upload HTML report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: reporte-${{ github.event.inputs.scenario }}
+          name: reporte-${{ inputs.scenario }}
           path: reporte-*.html
           retention-days: 3
           if-no-files-found: warn
 
       - name: Show backend logs if workflow failed
         if: failure()
+        shell: bash
         run: |
           tail -n 100 "$RUNNER_TEMP/backend.log" || true
 
       - name: Stop Spring Boot
         if: always()
+        shell: bash
         run: |
           if [ -f "$RUNNER_TEMP/backend.pid" ]; then
             kill "$(cat "$RUNNER_TEMP/backend.pid")" || true
