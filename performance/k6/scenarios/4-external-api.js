@@ -1,7 +1,7 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 // Importamos la configuración estricta de máximo 100 llamadas para cuidar la cuota de OMDb
-import { apiLimitedOptions } from '/github/workspace/qa/performance/k6/config/options.js';
+import { apiLimitedOptions } from '../config/standar-configuration.js';
 import { htmlReport } from "https://raw.githubusercontent.com/benc-uk/k6-reporter/main/dist/bundle.js";
 
 export const options = apiLimitedOptions;
