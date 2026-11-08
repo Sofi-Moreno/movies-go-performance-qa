@@ -24,7 +24,7 @@ function safeJson(response) {
 export default function () {
 
     const index = exec.scenario.iterationInTest;
-    const buyerId = `qa-return-${index}`;
+    const buyerId = String(9100000000 + index);
 
     // 1. Ejecutar devolución.
     const returnResponse = http.post(
