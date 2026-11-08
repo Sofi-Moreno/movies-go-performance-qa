@@ -1,3 +1,4 @@
+
 name: K6 Performance Tests
 
 on:
@@ -32,7 +33,15 @@ jobs:
           path: movies-go
           persist-credentials: false
 
-      - name: Set up Java 21 & Maven cache
+      - name: Verify k6 files
+        shell: bash
+        run: |
+          set -e
+          test -f "qa/performance/k6/config/options.js"
+          test -f "qa/performance/k6/scenarios/${{ github.event.inputs.scenario }}.js"
+          echo "k6 configuration and selected scenario found."
+
+      - name: Set up Java 21 and Maven cache
         uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -44,28 +53,51 @@ jobs:
         env:
           OMDB_KEY: ${{ secrets.OMDB_KEY }}
         run: |
-          nohup mvn -B -f movies-go/Back/pom.xml spring-boot:run > backend.log 2>&1 &
-          echo $! > backend.pid
+          nohup mvn -B -f movies-go/Back/pom.xml spring-boot:run \
+            > "$RUNNER_TEMP/backend.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/backend.pid"
 
       - name: Wait for backend to be ready
+        shell: bash
         run: |
-          timeout 60 bash -c 'until curl --silent --fail http://localhost:8080 > /dev/null || curl --silent --output /dev/null http://localhost:8080; do sleep 2; done'
+          for i in {1..45}; do
+            if curl --silent --max-time 2 \
+              --output /dev/null http://127.0.0.1:8080/; then
+              echo "Backend is responding."
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "Backend did not become available."
+          tail -n 100 "$RUNNER_TEMP/backend.log"
+          exit 1
+
+      - name: Set up k6
+        uses: grafana/setup-k6-action@v1
 
       - name: Run k6 scenario
-        uses: grafana/k6-action@v0.3.1
+        uses: grafana/run-k6-action@v1
         with:
-          filename: qa/performance/k6/scenarios/${{ github.event.inputs.scenario }}.js
+          path: qa/performance/k6/scenarios/${{ github.event.inputs.scenario }}.js
 
       - name: Upload HTML Report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: reporte-${{ github.event.inputs.scenario }}
-          path: "**/reporte-*.html" 
+          path: reporte-*.html
           retention-days: 3
+          if-no-files-found: warn
+
+      - name: Show backend logs if workflow failed
+        if: failure()
+        run: |
+          tail -n 100 "$RUNNER_TEMP/backend.log" || true
 
       - name: Stop Spring Boot
         if: always()
         run: |
-          if [ -f backend.pid ]; then
-            kill $(cat backend.pid) || true
+          if [ -f "$RUNNER_TEMP/backend.pid" ]; then
+            kill "$(cat "$RUNNER_TEMP/backend.pid")" || true
           fi
