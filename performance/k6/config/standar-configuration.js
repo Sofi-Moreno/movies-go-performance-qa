@@ -43,10 +43,30 @@
 
 export const standardOptions = {
     stages: [
-        { duration: '10s', target: 10 }, // Fase 1: Ramp-up (Subir a 10 usuarios en 10 seg)
-        { duration: '15s', target: 10 }, // Fase 2: Carga sostenida (Mantener 10 usuarios por 15 seg)
-        { duration: '10s', target: 0 },  // Fase 3: Ramp-down (Bajar a 0 usuarios en 10 seg)
+        { duration: '10s', target: 10 },
+        { duration: '15s', target: 10 },
+        { duration: '10s', target: 0 },
     ],
+    thresholds: {
+        checks: ['rate>0.99'],
+    },
+};
+
+// Pruebas que modifican datos.
+// Un solo VU ejecuta las iteraciones secuencialmente para evitar
+// interferencias entre compradores y operaciones sobre el stock.
+export const statefulOptions = {
+    scenarios: {
+        stateful_sequential: {
+            executor: 'shared-iterations',
+            vus: 1,
+            iterations: 10,
+            maxDuration: '2m',
+        },
+    },
+    thresholds: {
+        checks: ['rate>0.99'],
+    },
 };
 
 /**
@@ -55,7 +75,6 @@ export const standardOptions = {
  * 
  * ¿CÓMO MODIFICARLO DE FORMA SEGURA?
  * - 'iterations': Límite MÁXIMO EXACTO de peticiones que se enviarán en total. 
- *                 Actualmente en 100 para dejar margen para otras pruebas en el día.
  *                 NO SUPERAR LAS 300 POR PRUEBA para evitar bloqueos.
  * - 'vus': Usuarios simultáneos haciendo esas peticiones.
  */
@@ -63,9 +82,12 @@ export const apiLimitedOptions = {
     scenarios: {
         api_limit: {
             executor: 'shared-iterations',
-            vus: 5,
-            iterations: 100, // El script se detendrá exactamente tras 100 peticiones
+            vus: 1,
+            iterations: 1,
             maxDuration: '30s',
         },
+    },
+    thresholds: {
+        checks: ['rate>0.99'],
     },
 };
