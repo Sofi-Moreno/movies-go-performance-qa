@@ -31,6 +31,9 @@ jobs:
           cache-dependency-path: movies-go/Back/pom.xml
 
       - name: Start Spring Boot Application
+        env:
+          # Inyectamos de forma segura el secreto que sobrevivió a la transferencia
+          OMDB_KEY: ${{ secrets.OMDB_KEY }}
         run: |
           # Ejecutamos el backend en segundo plano usando 'nohup' y '&'
           nohup mvn -B -f movies-go/Back/pom.xml spring-boot:run > backend.log 2>&1 &
